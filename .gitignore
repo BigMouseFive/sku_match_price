@@ -1,0 +1,32 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.venv/
+env/
+venv/
+ENV/
+
+# Project runtime data
+data/
+logs/
+*.log
+
+# macOS
+.DS_Store
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Excel backup files
+~$*.xlsx
+
+# Input data files (do not commit private data)
+副本Doula BTS Suppression+Not on Deal.xlsx
+库存价值(0601).xlsx
+*.xlsx

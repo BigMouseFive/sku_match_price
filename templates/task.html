@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>任务处理中 - SKU 成本匹配工具</title>
+    <style>
+        * { box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            background: #f5f7fa;
+            margin: 0;
+            padding: 40px 20px;
+            color: #333;
+        }
+        .container {
+            max-width: 720px;
+            margin: 0 auto;
+            background: #fff;
+            border-radius: 12px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.06);
+            padding: 32px;
+        }
+        h1 {
+            margin-top: 0;
+            font-size: 22px;
+        }
+        .task-id {
+            color: #888;
+            font-size: 13px;
+            margin-bottom: 24px;
+        }
+        .status-card {
+            background: #f6ffed;
+            border: 1px solid #b7eb8f;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 24px;
+        }
+        .status-card.failed {
+            background: #fff2f0;
+            border-color: #ffccc7;
+        }
+        .status-card.queued {
+            background: #e6f7ff;
+            border-color: #91d5ff;
+        }
+        .status-label {
+            font-size: 14px;
+            color: #666;
+            margin-bottom: 6px;
+        }
+        .status-value {
+            font-size: 18px;
+            font-weight: 600;
+        }
+        .progress-wrap {
+            margin: 24px 0;
+        }
+        .progress-bar-bg {
+            height: 18px;
+            background: #f0f0f0;
+            border-radius: 9px;
+            overflow: hidden;
+        }
+        .progress-bar-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #1890ff, #40a9ff);
+            width: 0%;
+            border-radius: 9px;
+            transition: width 0.4s ease;
+        }
+        .progress-text {
+            display: flex;
+            justify-content: space-between;
+            margin-top: 8px;
+            font-size: 13px;
+            color: #666;
+        }
+        .queue-info {
+            margin-top: 16px;
+            padding: 12px;
+            background: #fafafa;
+            border-radius: 6px;
+            font-size: 14px;
+        }
+        .download-btn {
+            display: inline-block;
+            margin-top: 24px;
+            padding: 12px 28px;
+            background: #52c41a;
+            color: #fff;
+            text-decoration: none;
+            border-radius: 8px;
+            font-size: 16px;
+        }
+        .download-btn:hover { background: #73d13d; }
+        .back-link {
+            display: inline-block;
+            margin-top: 16px;
+            color: #1890ff;
+            text-decoration: none;
+            font-size: 14px;
+        }
+        .error-detail {
+            margin-top: 12px;
+            padding: 12px;
+            background: #fff1f0;
+            border-radius: 6px;
+            color: #cf1322;
+            font-size: 13px;
+            word-break: break-all;
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+    <h1>任务处理中</h1>
+    <div class="task-id">任务 ID：{{ task_id }}</div>
+
+    <div id="statusCard" class="status-card queued">
+        <div class="status-label">当前状态</div>
+        <div id="statusValue" class="status-value">排队中</div>
+    </div>
+
+    <div class="progress-wrap">
+        <div class="progress-bar-bg">
+            <div id="progressFill" class="progress-bar-fill"></div>
+        </div>
+        <div class="progress-text">
+            <span id="progressMessage">等待开始...</span>
+            <span id="progressPercent">0%</span>
+        </div>
+    </div>
+
+    <div id="queueInfo" class="queue-info" style="display:none;"></div>
+    <div id="resultArea"></div>
+
+    <a class="back-link" href="{{ url_for('index') }}">← 返回上传新任务</a>
+</div>
+
+<script>
+    const taskId = "{{ task_id }}";
+    let completed = false;
+
+    function updateUI(data) {
+        const card = document.getElementById('statusCard');
+        const statusValue = document.getElementById('statusValue');
+        const fill = document.getElementById('progressFill');
+        const msg = document.getElementById('progressMessage');
+        const pct = document.getElementById('progressPercent');
+        const queueInfo = document.getElementById('queueInfo');
+        const resultArea = document.getElementById('resultArea');
+
+        statusValue.textContent = data.message || data.status;
+        fill.style.width = data.progress + '%';
+        msg.textContent = data.message || '';
+        pct.textContent = data.progress + '%';
+
+        card.className = 'status-card';
+        if (data.status === 'failed') {
+            card.classList.add('failed');
+        } else if (data.status === 'queued') {
+            card.classList.add('queued');
+        } else {
+            card.classList.add('status-card');
+        }
+
+        if (data.queue_position > 0) {
+            queueInfo.style.display = 'block';
+            queueInfo.textContent = `当前排队位置：第 ${data.queue_position} 位`;
+        } else {
+            queueInfo.style.display = 'none';
+        }
+
+        if (data.status === 'completed' && !completed) {
+            completed = true;
+            resultArea.innerHTML = `
+                <div class="status-card" style="margin-top:24px;">
+                    <div class="status-label">匹配结果</div>
+                    <div class="status-value">共 ${data.total_rows} 行数据（保留原表 5 个 sheet 结构）</div>
+                </div>
+                <a class="download-btn" href="/download/${data.result_file}">下载结果 Excel</a>
+            `;
+        }
+
+        if (data.status === 'failed') {
+            resultArea.innerHTML = `
+                <div class="error-detail">${data.error}</div>
+            `;
+            completed = true;
+        }
+    }
+
+    async function poll() {
+        if (completed) return;
+        try {
+            const res = await fetch(`/api/task/${taskId}`);
+            if (!res.ok) {
+                document.getElementById('progressMessage').textContent = '获取任务状态失败';
+                return;
+            }
+            const data = await res.json();
+            updateUI(data);
+            if (data.status === 'completed' || data.status === 'failed') {
+                return;
+            }
+        } catch (e) {
+            console.error(e);
+        }
+        setTimeout(poll, 1000);
+    }
+
+    poll();
+</script>
+</body>
+</html>
