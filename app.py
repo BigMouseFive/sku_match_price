@@ -428,18 +428,27 @@ def build_inventory_table(inv_path, progress_callback=None):
     return result
 
 
-def detect_site(row):
-    """根据源表行的 marketplace 列判断站点。"""
+def detect_site(row, sku_value=None):
+    """根据源表行的 marketplace 列或 SKU 文本判断站点。"""
+    # 优先使用 marketplace / marketplace_id 列
     mp = None
     for col in ["marketplace", "marketplace_id"]:
         if col in row.index and pd.notna(row[col]):
             mp = str(row[col]).strip().upper()
             break
-    # 338801 是 AE 的 marketplace_id
     if mp in ("AE", "338801"):
         return "dubai"
     if mp == "SA":
         return "saudi"
+
+    # 没有 marketplace 列时，从 SKU 文本推断（如 #KSA02-FBA / #UAE03-FBA）
+    if sku_value and isinstance(sku_value, str):
+        sku_upper = sku_value.upper()
+        if "KSA" in sku_upper:
+            return "saudi"
+        if "UAE" in sku_upper:
+            return "dubai"
+
     return "dubai"  # 默认兜底为迪拜
 
 
@@ -458,7 +467,14 @@ def _process_one_sheet(sheet_name, df, inv_combined):
     # 去掉源表中的空列 / Unnamed 列
     df = df[[c for c in df.columns if not _is_unnamed_column(c)]]
 
-    df["_site"] = df.apply(detect_site, axis=1)
+    # 定位原始 SKU 列，用于站点推断
+    sku_col_candidates = ["merchant_item_sku", "merchant_sku"]
+    sku_col = next((c for c in df.columns if c in sku_col_candidates), None)
+
+    df["_site"] = df.apply(
+        lambda row: detect_site(row, sku_value=row.get(sku_col) if sku_col else None),
+        axis=1,
+    )
 
     # 按 SKU + 站点 合并库存信息
     merged = df.merge(inv_combined, on=["SKU", "_site"], how="left")
