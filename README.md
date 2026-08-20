@@ -38,6 +38,20 @@ cd sku_match_price
 http://127.0.0.1:5003
 ```
 
+## 一键更新
+
+项目目录下执行：
+
+```bash
+./update.sh
+```
+
+该脚本会：
+
+1. `git pull origin main` 拉取最新代码
+2. 更新 `.venv` 中的 Python 依赖
+3. 重启 launchd 服务
+
 ## 手动运行
 
 ```bash
@@ -71,6 +85,7 @@ rm ~/Library/LaunchAgents/com.kimi.sku-match-price.plist && launchctl remove com
 sku_match_price/
 ├── app.py                 # Flask 后端 + 任务队列
 ├── install.sh             # macOS 一键安装脚本
+├── update.sh              # macOS 一键更新脚本
 ├── requirements.txt       # Python 依赖
 ├── templates/
 │   ├── index.html         # 上传页 + 任务列表
