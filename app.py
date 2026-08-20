@@ -6,6 +6,7 @@ import time
 import uuid
 import hashlib
 import json
+import subprocess
 from collections import deque
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
@@ -32,8 +33,11 @@ UPLOAD_FOLDER = tempfile.mkdtemp(prefix="sku_match_")
 app.config["UPLOAD_FOLDER"] = UPLOAD_FOLDER
 app.config["MAX_CONTENT_LENGTH"] = 200 * 1024 * 1024  # 200 MB
 
+# 项目根目录
+PROJECT_DIR = os.path.dirname(os.path.abspath(__file__))
+
 # 本地持久化目录：任务元数据 + 结果文件
-DATA_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data")
+DATA_DIR = os.path.join(PROJECT_DIR, "data")
 RESULTS_DIR = os.path.join(DATA_DIR, "results")
 TASKS_FILE = os.path.join(DATA_DIR, "tasks.json")
 MAX_PERSISTED_TASKS = 10
@@ -618,6 +622,50 @@ def api_task_status(task_id):
 def download(filename):
     path = os.path.join(RESULTS_DIR, filename)
     return send_file(path, as_attachment=True)
+
+
+@app.route("/api/update", methods=["POST"])
+def api_update():
+    """
+    一键更新：拉取最新代码并重新部署。
+    由于会重启本服务，更新脚本在独立子进程中运行。
+    """
+    try:
+        # 先执行 git pull，检查是否有更新
+        result = subprocess.run(
+            ["git", "pull", "origin", "main"],
+            cwd=PROJECT_DIR,
+            capture_output=True,
+            text=True,
+            timeout=60,
+        )
+        pull_output = (result.stdout + result.stderr).strip()
+
+        if result.returncode != 0:
+            return jsonify({"success": False, "message": f"git pull 失败：{pull_output}"}), 500
+
+        if "already up to date" in pull_output.lower() or "Already up to date" in pull_output:
+            return jsonify({"success": True, "updated": False, "message": "当前已是最新版本"})
+
+        # 有更新，在独立子进程中运行 update.sh（它会重启服务）
+        # 使用 nohup + setsid 避免当前进程被杀掉时子进程也退出
+        subprocess.Popen(
+            ["nohup", "bash", "./update.sh"],
+            cwd=PROJECT_DIR,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            start_new_session=True,
+        )
+
+        return jsonify(
+            {
+                "success": True,
+                "updated": True,
+                "message": "检测到更新，正在部署并重启服务，约 10 秒后请刷新页面。",
+            }
+        )
+    except Exception as e:
+        return jsonify({"success": False, "message": f"更新异常：{e}"}), 500
 
 
 if __name__ == "__main__":

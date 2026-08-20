@@ -159,6 +159,27 @@
             background: #fafafa;
             border-radius: 6px;
         }
+        .update-btn {
+            padding: 10px 24px;
+            background: #fa8c16;
+            color: #fff;
+            border: none;
+            border-radius: 6px;
+            font-size: 14px;
+            cursor: pointer;
+        }
+        .update-btn:hover { background: #ff9c2e; }
+        .update-btn:disabled { background: #d9d9d9; cursor: not-allowed; }
+        .update-status {
+            margin-top: 12px;
+            padding: 10px 14px;
+            border-radius: 6px;
+            font-size: 13px;
+            background: #f0f0f0;
+        }
+        .update-success { background: #f6ffed; color: #389e0d; }
+        .update-updating { background: #e6f7ff; color: #096dd9; }
+        .update-error { background: #fff2f0; color: #cf1322; }
     </style>
 </head>
 <body>
@@ -260,6 +281,74 @@
         {% endif %}
     </div>
 
+    <div class="task-section">
+        <h2>程序更新</h2>
+        <p style="font-size: 13px; color: #666; margin-bottom: 12px;">
+            点击按钮自动从 GitHub 拉取最新代码并重启服务，无需进入命令行。
+        </p>
+        <button type="button" id="updateBtn" class="update-btn" onclick="checkUpdate()">检查并更新</button>
+        <div id="updateStatus" class="update-status" style="display:none;"></div>
+    </div>
+
 </div>
+
+<script>
+    async function checkUpdate() {
+        const btn = document.getElementById('updateBtn');
+        const status = document.getElementById('updateStatus');
+        btn.disabled = true;
+        btn.textContent = '正在检查更新...';
+        status.style.display = 'block';
+        status.className = 'update-status';
+        status.textContent = '正在连接 GitHub...';
+
+        try {
+            const res = await fetch('/api/update', { method: 'POST' });
+            const data = await res.json();
+            status.textContent = data.message;
+
+            if (data.success && data.updated) {
+                status.classList.add('update-updating');
+                btn.textContent = '更新中...';
+                // 轮询服务是否恢复
+                let attempts = 0;
+                const maxAttempts = 30;
+                const timer = setInterval(async () => {
+                    attempts++;
+                    try {
+                        await fetch('/', { method: 'HEAD' });
+                        clearInterval(timer);
+                        status.classList.remove('update-updating');
+                        status.classList.add('update-success');
+                        status.textContent = '服务已恢复，页面即将刷新...';
+                        setTimeout(() => location.reload(), 1500);
+                    } catch (e) {
+                        status.textContent = `正在等待服务重启... (${attempts}/${maxAttempts})`;
+                        if (attempts >= maxAttempts) {
+                            clearInterval(timer);
+                            status.classList.add('update-error');
+                            status.textContent = '等待超时，请手动刷新页面确认。';
+                            btn.disabled = false;
+                            btn.textContent = '检查并更新';
+                        }
+                    }
+                }, 2000);
+            } else if (data.success) {
+                status.classList.add('update-success');
+                btn.disabled = false;
+                btn.textContent = '检查并更新';
+            } else {
+                status.classList.add('update-error');
+                btn.disabled = false;
+                btn.textContent = '检查并更新';
+            }
+        } catch (e) {
+            status.classList.add('update-error');
+            status.textContent = '请求失败：' + e.message;
+            btn.disabled = false;
+            btn.textContent = '检查并更新';
+        }
+    }
+</script>
 </body>
 </html>
